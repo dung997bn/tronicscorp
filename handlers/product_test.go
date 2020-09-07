@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +18,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+var docID string
 var (
 	c   *mongo.Client
 	db  *mongo.Database
@@ -40,6 +42,7 @@ func init() {
 
 }
 func TestProduct(t *testing.T) {
+
 	t.Run("test create product", func(t *testing.T) {
 		body := `
 		[
@@ -65,6 +68,7 @@ func TestProduct(t *testing.T) {
     }
 ]		
 		`
+
 		req := httptest.NewRequest("POST", "/products", strings.NewReader(body))
 		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 		res := httptest.NewRecorder()
@@ -88,4 +92,25 @@ func TestProduct(t *testing.T) {
 		assert.Equal(t, http.StatusOK, res.Code)
 
 	})
+
+	t.Run("get products with query params", func(t *testing.T) {
+		var products []Product
+		req := httptest.NewRequest(http.MethodGet, "/products?product_name=laptop", nil)
+		res := httptest.NewRecorder()
+		e := echo.New()
+		c := e.NewContext(req, res)
+		h.Col = col
+		err := h.GetProducts(c)
+
+		assert.Nil(t, err)
+		assert.Equal(t, http.StatusOK, res.Code)
+
+		assert.Equal(t, http.StatusOK, res.Code)
+		err = json.Unmarshal(res.Body.Bytes(), &products)
+		assert.Nil(t, err)
+		for _, product := range products {
+			assert.Equal(t, "laptop", product.Name)
+		}
+	})
+
 }

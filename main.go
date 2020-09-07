@@ -67,9 +67,18 @@ func main() {
 	e.Logger.SetLevel(log.ERROR)
 	e.Pre(middleware.RemoveTrailingSlash())
 	e.Pre(addCorrelationID)
+	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
+		Format: `${time_rfc3339_nano} ${remote_ip} ${host} ${method} ${uri} ${user_agent} ${status} ${error} ${latency_human}` + "\n",
+	}))
+
 	h := handlers.ProductHandler{Col: col}
-	e.POST("/products", h.CreateProducts, middleware.BodyLimit("1M"))
+	//routes
 	e.GET("/products", h.GetProducts)
+	e.GET("/products/:id", h.GetSingleProduct)
+	e.POST("/products", h.CreateProducts, middleware.BodyLimit("1M"))
+
+	e.PUT("/products/:id", h.UpdateProduct, middleware.BodyLimit("1M"))
+	e.DELETE("/products/:id", h.DeleteProduct)
 	e.Logger.Infof("Listening on %s:%s", cfg.Host, cfg.Port)
 	e.Logger.Fatal(e.Start(fmt.Sprintf("%s:%s", cfg.Host, cfg.Port)))
 }
