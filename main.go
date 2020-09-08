@@ -13,6 +13,7 @@ import (
 	"github.com/dung997bn/tronicscorp/config"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/labstack/echo/v4"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -23,10 +24,11 @@ const (
 )
 
 var (
-	c   *mongo.Client
-	db  *mongo.Database
-	col *mongo.Collection
-	cfg config.Properties
+	c       *mongo.Client
+	db      *mongo.Database
+	prodCol *mongo.Collection
+	userCol *mongo.Collection
+	cfg     config.Properties
 )
 
 func init() {
@@ -40,7 +42,20 @@ func init() {
 		fmt.Printf("Unable to connect database: %v", err)
 	}
 	db = c.Database(cfg.DBName)
-	col = db.Collection(cfg.CollectionName)
+	prodCol = db.Collection(cfg.ProductCollection)
+	userCol = db.Collection(cfg.UsersCollection)
+
+	isUserIndexUnique := true
+	indexModel := mongo.IndexModel{
+		Keys: bson.D{{"username", 1}},
+		Options: &options.IndexOptions{
+			Unique: &isUserIndexUnique,
+		},
+	}
+	_, err = userCol.Indexes().CreateOne(context.Background(), indexModel)
+	if err != nil {
+		log.Fatalf("Unable to create an index: %+v", err)
+	}
 }
 
 //custom header middleware: X-Request-Id
@@ -65,20 +80,31 @@ func addCorrelationID(next echo.HandlerFunc) echo.HandlerFunc {
 func main() {
 	e := echo.New()
 	e.Logger.SetLevel(log.ERROR)
+	//middlware
+	jwtMiddleware := middleware.JWTWithConfig(middleware.JWTConfig{
+		SigningKey:  []byte(cfg.JWTTokenSeCret),
+		TokenLookup: "header:X-auth-token",
+	})
 	e.Pre(middleware.RemoveTrailingSlash())
 	e.Pre(addCorrelationID)
 	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
-		Format: `${time_rfc3339_nano} ${remote_ip} ${host} ${method} ${uri} ${user_agent} ${status} ${error} ${latency_human}` + "\n",
+		Format: `${time_rfc3339_nano} ${remote_ip} ${host} ${header:X-correlation-ID} ${method} ${uri} ${user_agent} ${status} ${error} ${latency_human}` + "\n",
 	}))
 
-	h := handlers.ProductHandler{Col: col}
+	h := handlers.ProductHandler{Col: prodCol}
+	uh := handlers.UserHandler{Col: userCol}
 	//routes
+	//Products
 	e.GET("/products", h.GetProducts)
 	e.GET("/products/:id", h.GetSingleProduct)
-	e.POST("/products", h.CreateProducts, middleware.BodyLimit("1M"))
+	e.POST("/products", h.CreateProducts, middleware.BodyLimit("1M"), jwtMiddleware)
 
-	e.PUT("/products/:id", h.UpdateProduct, middleware.BodyLimit("1M"))
-	e.DELETE("/products/:id", h.DeleteProduct)
+	e.PUT("/products/:id", h.UpdateProduct, middleware.BodyLimit("1M"), jwtMiddleware)
+	e.DELETE("/products/:id", h.DeleteProduct, jwtMiddleware)
+
+	//Users
+	e.POST("/users", uh.CreateUser)
+	e.POST("/auth", uh.AuthenUser)
 	e.Logger.Infof("Listening on %s:%s", cfg.Host, cfg.Port)
 	e.Logger.Fatal(e.Start(fmt.Sprintf("%s:%s", cfg.Host, cfg.Port)))
 }

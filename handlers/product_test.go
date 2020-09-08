@@ -11,7 +11,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/dung997bn/tronicscorp/config"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/labstack/echo/v4"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -20,11 +19,10 @@ import (
 
 var docID string
 var (
-	c   *mongo.Client
-	db  *mongo.Database
-	col *mongo.Collection
-	cfg config.Properties
-	h   ProductHandler
+	c          *mongo.Client
+	db         *mongo.Database
+	colProduct *mongo.Collection
+	h          ProductHandler
 )
 
 func init() {
@@ -38,7 +36,7 @@ func init() {
 		fmt.Printf("Unable to connect database: %v", err)
 	}
 	db = c.Database(cfg.DBName)
-	col = db.Collection(cfg.CollectionName)
+	colProduct = db.Collection(cfg.ProductCollection)
 
 }
 func TestProduct(t *testing.T) {
@@ -75,7 +73,7 @@ func TestProduct(t *testing.T) {
 
 		e := echo.New()
 		c := e.NewContext(req, res)
-		h.Col = col
+		h.Col = colProduct
 		err := h.CreateProducts(c)
 		assert.Nil(t, err)
 		assert.Equal(t, http.StatusCreated, res.Code)
@@ -86,7 +84,7 @@ func TestProduct(t *testing.T) {
 		res := httptest.NewRecorder()
 		e := echo.New()
 		c := e.NewContext(req, res)
-		h.Col = col
+		h.Col = colProduct
 		err := h.GetProducts(c)
 		assert.Nil(t, err)
 		assert.Equal(t, http.StatusOK, res.Code)
@@ -99,7 +97,7 @@ func TestProduct(t *testing.T) {
 		res := httptest.NewRecorder()
 		e := echo.New()
 		c := e.NewContext(req, res)
-		h.Col = col
+		h.Col = colProduct
 		err := h.GetProducts(c)
 
 		assert.Nil(t, err)
