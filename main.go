@@ -3,6 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"strings"
+
+	"github.com/dgrijalva/jwt-go"
 
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
@@ -77,6 +81,27 @@ func addCorrelationID(next echo.HandlerFunc) echo.HandlerFunc {
 	}
 }
 
+func adminMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		hToken := c.Request().Header.Get("X-auth-token")
+		token := strings.Split(hToken, " ")[1]
+
+		claims := jwt.MapClaims{}
+		_, err := jwt.ParseWithClaims(token, claims, func(*jwt.Token) (interface{}, error) {
+			return []byte(cfg.JWTTokenSeCret), nil
+		})
+		if err != nil {
+			return echo.NewHTTPError(http.StatusUnauthorized, "Unable to parse token")
+		}
+		fmt.Println(claims)
+		if !claims["authorized"].(bool) {
+			return echo.NewHTTPError(http.StatusForbidden, "Not authorized")
+		}
+
+		return next(c)
+	}
+}
+
 func main() {
 	e := echo.New()
 	e.Logger.SetLevel(log.ERROR)
@@ -100,7 +125,7 @@ func main() {
 	e.POST("/products", h.CreateProducts, middleware.BodyLimit("1M"), jwtMiddleware)
 
 	e.PUT("/products/:id", h.UpdateProduct, middleware.BodyLimit("1M"), jwtMiddleware)
-	e.DELETE("/products/:id", h.DeleteProduct, jwtMiddleware)
+	e.DELETE("/products/:id", h.DeleteProduct, jwtMiddleware, adminMiddleware)
 
 	//Users
 	e.POST("/users", uh.CreateUser)
