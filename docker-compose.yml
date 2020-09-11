@@ -1,0 +1,8 @@
+version: '3.4'
+
+services:
+  tronicscorp:
+    image: tronicscorp
+    build: .
+    ports:
+      - 8080
